@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASRL Stock Audit Checker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/iconfont/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --card-bg: #ffffff;
+    --border: #e3e1dc;
+    --border-strong: #c9c6bf;
+    --text-primary: #1f1e1c;
+    --text-secondary: #6e6c66;
+    --text-tertiary: #a8a59d;
+    --accent-info-bg: #e6f1fb;
+    --accent-info-text: #0c447c;
+    --accent-success-bg: #eaf3de;
+    --accent-success-text: #27500a;
+    --accent-warning-bg: #faeeda;
+    --accent-warning-text: #633806;
+    --accent-danger-bg: #fcebeb;
+    --accent-danger-text: #791f1f;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", "Consolas", "Monaco", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1b19;
+      --card-bg: #262522;
+      --border: #3a3833;
+      --border-strong: #4d4a44;
+      --text-primary: #f0eee8;
+      --text-secondary: #a8a59d;
+      --text-tertiary: #76736c;
+      --accent-info-bg: #0c447c;
+      --accent-info-text: #b5d4f4;
+      --accent-success-bg: #27500a;
+      --accent-success-text: #c0dd97;
+      --accent-warning-bg: #633806;
+      --accent-warning-text: #fac775;
+      --accent-danger-bg: #791f1f;
+      --accent-danger-text: #f7c1c1;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  header {
+    margin-bottom: 1.75rem;
+  }
+
+  header h1 {
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 4px;
+  }
+
+  header p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .uz {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    background: var(--card-bg);
+  }
+  .uz:hover, .uz.drag-over { background: var(--accent-info-bg); border-color: var(--accent-info-text); }
+  .uz.done { border-style: solid; border-color: #639922; background: var(--accent-success-bg); }
+  .uz.done i { color: var(--accent-success-text) !important; }
+  .uz input { display: none; }
+  .uz i { font-size: 22px; color: var(--text-secondary); }
+  .uz p.title { font-size: 13px; font-weight: 500; margin: 6px 0 2px; color: var(--text-primary); }
+  .uz p.sub { font-size: 11px; color: var(--text-secondary); margin: 0; word-break: break-all; }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--card-bg); border: 0.5px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 500; flex-shrink: 0;
+  }
+
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .filter-row {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filter-row span { font-size: 12px; color: var(--text-secondary); }
+
+  select, input[type="text"] {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-primary);
+  }
+  select:focus, input[type="text"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-info-bg);
+    border-color: var(--accent-info-text);
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  #run-btn {
+    padding: 9px 22px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    transition: opacity 0.2s, background 0.15s;
+  }
+  #run-btn:hover:not(:disabled) { background: var(--accent-info-bg); }
+  #run-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .mc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .mc {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.9rem 1rem;
+  }
+  .mc .lbl { font-size: 11px; color: var(--text-secondary); margin: 0; }
+  .mc .val { font-size: 24px; font-weight: 500; margin: 4px 0 0; }
+
+  .tabs-row {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;
+  }
+  .tab-btn {
+    padding: 6px 13px; font-size: 12px; border-radius: var(--radius-md);
+    border: 0.5px solid var(--border); background: transparent;
+    color: var(--text-secondary);
+  }
+  .tab-btn.active {
+    background: var(--card-bg); color: var(--text-primary);
+    border-color: var(--border-strong); font-weight: 500;
+  }
+  .tabs-row .right { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-outline {
+    font-size: 12px; padding: 6px 14px; border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-strong); background: var(--card-bg);
+    color: var(--text-primary);
+  }
+  .btn-outline:hover { background: var(--accent-info-bg); }
+
+  .table-card {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: auto;
+    max-height: 480px;
+  }
+  table.rt { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.rt th {
+    text-align: left; padding: 9px 12px; font-weight: 500; font-size: 11px;
+    color: var(--text-secondary); background: var(--card-bg);
+    border-bottom: 0.5px solid var(--border);
+    position: sticky; top: 0; z-index: 1;
+  }
+  table.rt td {
+    padding: 8px 12px; border-bottom: 0.5px solid var(--border);
+    color: var(--text-primary); vertical-align: middle;
+  }
+  table.rt tr:last-child td { border-bottom: none; }
+  table.rt tr:hover td { background: var(--bg); }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
+    padding: 2px 9px; border-radius: 20px; font-weight: 500; white-space: nowrap;
+  }
+  .t-danger { background: var(--accent-danger-bg); color: var(--accent-danger-text); }
+  .t-warn   { background: var(--accent-warning-bg); color: var(--accent-warning-text); }
+  .t-ok     { background: var(--accent-success-bg); color: var(--accent-success-text); }
+  .t-info   { background: var(--accent-info-bg); color: var(--accent-info-text); }
+
+  .store-chip {
+    display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px;
+    background: var(--accent-info-bg); color: var(--accent-info-text); font-family: var(--font-mono);
+  }
+
+  #row-count {
+    font-size: 11px; color: var(--text-secondary); margin: 8px 0 0; text-align: right;
+  }
+
+  .name-cell {
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 2rem;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1><i class="ti ti-clipboard-check" aria-hidden="true"></i> ASRL stock audit checker</h1>
+    <p>Compare yesterday's and today's stock reports against yesterday's sales to spot missing, unchanged, or wrongly-updated SKUs.</p>
+  </header>
+
+  <!-- UPLOAD PANEL -->
+  <div id="panel-upload">
+    <div class="step"><span class="step-num">1</span> Upload both stock reports and yesterday's sales file</div>
+
+    <div class="grid3">
+      <div class="uz" id="z-y" onclick="document.getElementById('i-y').click()">
+        <input type="file" id="i-y" accept=".csv,.xlsx,.xls">
+        <i class="ti ti-calendar-minus" aria-hidden="true"></i>
+        <p class="title">Yesterday's stock</p>
+        <p class="sub" id="l-y">Store_product_Stock_Report…</p>
+      </div>
+      <div class="uz" id="z-t" onclick="document.getElementById('i-t').click()">
+        <input type="file" id="i-t" accept=".csv,.xlsx,.xls">
+        <i class="ti ti-calendar-check" aria-hidden="true"></i>
+        <p class="title">Today's stock</p>
+        <p class="sub" id="l-t">Store_product_Stock_Report…</p>
+      </div>
+      <div class="uz" id="z-s" onclick="document.getElementById('i-s').click()">
+        <input type="file" id="i-s" accept=".csv,.xlsx,.xls">
+        <i class="ti ti-receipt-2" aria-hidden="true"></i>
+        <p class="title">Yesterday's sales</p>
+        <p class="sub" id="l-s">Store Transaction Sales…</p>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <span>Filter by store (optional):</span>
+      <select id="store-sel"><option value="">All stores</option></select>
+    </div>
+
+    <button id="run-btn" disabled onclick="runAnalysis()">
+      <i class="ti ti-chart-bar" aria-hidden="true"></i> Run audit
+    </button>
+  </div>
+
+  <!-- RESULTS PANEL -->
+  <div id="panel-results" style="display:none;">
+
+    <div class="mc-grid">
+      <div class="mc"><p class="lbl">Yesterday SKUs</p><p class="val" id="m-y">—</p></div>
+      <div class="mc"><p class="lbl">Today SKUs</p><p class="val" id="m-t">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-danger-text);">Missing from today</p><p class="val" style="color:var(--accent-danger-text);" id="m-miss">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-warning-text);">Stock unchanged</p><p class="val" style="color:var(--accent-warning-text);" id="m-unch">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-danger-text);">Sold, not updated</p><p class="val" style="color:var(--accent-danger-text);" id="m-snu">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-success-text);">Updated correctly</p><p class="val" style="color:var(--accent-success-text);" id="m-ok">—</p></div>
+    </div>
+
+    <div class="tabs-row">
+      <button class="tab-btn active" onclick="switchTab('missing',this)"><i class="ti ti-alert-circle" aria-hidden="true"></i> Missing</button>
+      <button class="tab-btn" onclick="switchTab('sold-not-updated',this)"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Sold, not updated</button>
+      <button class="tab-btn" onclick="switchTab('unchanged',this)"><i class="ti ti-refresh-off" aria-hidden="true"></i> Unchanged</button>
+      <button class="tab-btn" onclick="switchTab('all',this)">All SKUs</button>
+      <div class="right">
+        <input id="search-box" type="text" placeholder="Search SKU / product…" style="width:180px;" oninput="applySearch()">
+        <button class="btn-outline" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+        <button class="btn-outline" onclick="resetAll()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <table class="rt">
+        <thead>
+          <tr>
+            <th>Store</th>
+            <th>Product code</th>
+            <th>Product name</th>
+            <th>Category</th>
+            <th>Yest. total</th>
+            <th>Today total</th>
+            <th>Yest. available</th>
+            <th>Today available</th>
+            <th>Sales qty</th>
+            <th>Total status</th>
+            <th>Available status</th>
+          </tr>
+        </thead>
+        <tbody id="rt-body"></tbody>
+      </table>
+    </div>
+    <p id="row-count"></p>
+  </div>
+
+  <footer>
+    All processing happens locally in your browser — no files are uploaded to any server.
+  </footer>
+
+</div>
+
+<script>
+let D = { y: null, t: null, s: null };
+let allRows = [];
+let filteredRows = [];
+let currentTab = 'missing';
+
+// ── file reader ──────────────────────────────────────────────────────────────
+function readFile(file, cb) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  if (ext === 'csv') {
+    reader.onload = e => {
+      const p = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+      cb(p.data, p.meta.fields);
+    };
+    reader.readAsText(file);
+  } else {
+    reader.onload = e => {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const fields = rows.length ? Object.keys(rows[0]) : [];
+      cb(rows, fields);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// ── column guessing ──────────────────────────────────────────────────────────
+function guess(fields, hints) {
+  for (const h of hints) {
+    const f = fields.find(f => f.toLowerCase().includes(h));
+    if (f) return f;
+  }
+  return fields[0] || '';
+}
+
+// Known column patterns for Miniso stock export
+const SKU_HINTS   = ['product code', '商品代码'];
+const NAME_HINTS  = ['product name商品名称.1', 'product name', '商品名称'];
+const TOTAL_HINTS = ['total stock', '总库存'];
+const AVAIL_HINTS = ['available stock', '可用库存'];
+const STORE_HINTS = ['store name门店代码', 'store code', '门店代码'];
+const CAT_HINTS   = ['category name大类名称.1', 'category name', '大类名称'];
+// Sales file patterns
+const S_SKU_HINTS   = ['product code', '商品代码'];
+const S_QTY_HINTS   = ['qty'];
+const S_STORE_HINTS = ['store code'];
+
+// ── wire up upload zones ─────────────────────────────────────────────────────
+function wireZone(inputId, zoneId, lblId, key) {
+  const inp = document.getElementById(inputId);
+  const zone = document.getElementById(zoneId);
+  function handle(file) {
+    if (!file) return;
+    readFile(file, (rows, fields) => {
+      D[key] = { rows, fields, name: file.name };
+      document.getElementById(lblId).textContent = file.name.length > 30 ? file.name.slice(0,28)+'…' : file.name;
+      zone.classList.add('done');
+      afterUpload();
+    });
+  }
+  inp.addEventListener('change', e => handle(e.target.files[0]));
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handle(e.dataTransfer.files[0]); });
+}
+
+function afterUpload() {
+  const ready = D.y && D.t && D.s;
+  const btn = document.getElementById('run-btn');
+  btn.disabled = !ready;
+
+  if (D.y || D.t) {
+    const src = D.y || D.t;
+    const storeCol = guess(src.fields, STORE_HINTS);
+    const stores = [...new Set(src.rows.map(r => String(r[storeCol]).trim()).filter(Boolean))].sort();
+    const sel = document.getElementById('store-sel');
+    sel.innerHTML = '<option value="">All stores</option>';
+    stores.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+  }
+}
+
+wireZone('i-y','z-y','l-y','y');
+wireZone('i-t','z-t','l-t','t');
+wireZone('i-s','z-s','l-s','s');
+
+// ── main analysis ────────────────────────────────────────────────────────────
+function runAnalysis() {
+  const yF = D.y.fields, tF = D.t.fields, sF = D.s.fields;
+
+  const skuColY    = guess(yF, SKU_HINTS);
+  const skuColT    = guess(tF, SKU_HINTS);
+  const nameCol    = guess(yF, NAME_HINTS);
+  const totalColY  = guess(yF, TOTAL_HINTS);
+  const totalColT  = guess(tF, TOTAL_HINTS);
+  const availColY  = guess(yF, AVAIL_HINTS);
+  const availColT  = guess(tF, AVAIL_HINTS);
+  const storeColY  = guess(yF, STORE_HINTS);
+  const storeColT  = guess(tF, STORE_HINTS);
+  const catCol     = guess(yF, CAT_HINTS);
+  const sSkuCol    = guess(sF, S_SKU_HINTS);
+  const sQtyCol    = guess(sF, S_QTY_HINTS);
+  const sStoreCol  = guess(sF, S_STORE_HINTS);
+
+  const filterStore = document.getElementById('store-sel').value;
+  const toNum = v => { const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; };
+  const key = (store, sku) => `${store}||${sku}`;
+
+  // Build yesterday map: storeCode+SKU -> { qty, name, cat, store }
+  const yMap = {};
+  D.y.rows.forEach(r => {
+    const store = String(r[storeColY]).trim();
+    const sku   = String(r[skuColY]).trim();
+    if (!sku || sku === 'undefined' || sku === '') return;
+    if (filterStore && store !== filterStore) return;
+    yMap[key(store,sku)] = {
+      store, sku,
+      name: String(r[nameCol] || '').trim(),
+      cat:  String(r[catCol]  || '').trim(),
+      yTotal: toNum(r[totalColY]),
+      yAvail: toNum(r[availColY])
+    };
+  });
+
+  // Build today map
+  const tMap = {};
+  D.t.rows.forEach(r => {
+    const store = String(r[storeColT]).trim();
+    const sku   = String(r[skuColT]).trim();
+    if (!sku || sku === 'undefined' || sku === '') return;
+    if (filterStore && store !== filterStore) return;
+    tMap[key(store,sku)] = {
+      tTotal: toNum(r[totalColT]),
+      tAvail: toNum(r[availColT])
+    };
+  });
+
+  // Build sales map: storeCode+SKU -> total qty sold
+  const sMap = {};
+  D.s.rows.forEach(r => {
+    const store = String(r[sStoreCol]).trim();
+    const sku   = String(r[sSkuCol]).trim();
+    if (!sku || sku === 'undefined') return;
+    if (filterStore && store !== filterStore) return;
+    const k = key(store, sku);
+    sMap[k] = (sMap[k] || 0) + toNum(r[sQtyCol]);
+  });
+
+  function statusFor(yQty, tQty, sQty) {
+    if (tQty === undefined) return 'missing';
+    if (sQty > 0 && tQty === yQty) return 'sold-not-updated';
+    if (tQty === yQty) return 'unchanged';
+    return 'updated';
+  }
+
+  allRows = [];
+  Object.entries(yMap).forEach(([k, d]) => {
+    const t    = tMap[k];
+    const sQty = sMap[k] || 0;
+
+    const tTotal = t ? t.tTotal : undefined;
+    const tAvail = t ? t.tAvail : undefined;
+
+    const expTotal = d.yTotal - sQty;
+    const expAvail = d.yAvail - sQty;
+
+    const statusTotal = statusFor(d.yTotal, tTotal, sQty);
+    const statusAvail = statusFor(d.yAvail, tAvail, sQty);
+
+    // Combined status: worst of the two (missing > sold-not-updated > unchanged > updated)
+    const rank = { 'missing': 3, 'sold-not-updated': 2, 'unchanged': 1, 'updated': 0 };
+    const status = rank[statusTotal] >= rank[statusAvail] ? statusTotal : statusAvail;
+
+    allRows.push({
+      store: d.store, sku: d.sku, name: d.name, cat: d.cat,
+      yTotal: d.yTotal, yAvail: d.yAvail,
+      tTotal: tTotal !== undefined ? tTotal : null,
+      tAvail: tAvail !== undefined ? tAvail : null,
+      sQty,
+      expTotal, expAvail,
+      statusTotal, statusAvail, status
+    });
+  });
+
+  const miss = allRows.filter(r => r.status === 'missing').length;
+  const unch = allRows.filter(r => r.status === 'unchanged').length;
+  const snu  = allRows.filter(r => r.status === 'sold-not-updated').length;
+  const ok   = allRows.filter(r => r.status === 'updated').length;
+
+  document.getElementById('m-y').textContent    = Object.keys(yMap).length.toLocaleString();
+  document.getElementById('m-t').textContent    = Object.keys(tMap).length.toLocaleString();
+  document.getElementById('m-miss').textContent = miss.toLocaleString();
+  document.getElementById('m-unch').textContent = unch.toLocaleString();
+  document.getElementById('m-snu').textContent  = snu.toLocaleString();
+  document.getElementById('m-ok').textContent   = ok.toLocaleString();
+
+  document.getElementById('panel-upload').style.display  = 'none';
+  document.getElementById('panel-results').style.display = 'block';
+
+  switchTab('missing', document.querySelector('.tab-btn'));
+}
+
+// ── table rendering ──────────────────────────────────────────────────────────
+const STATUS_CFG = {
+  'missing':          ['t-danger', 'Missing from today'],
+  'sold-not-updated': ['t-danger', 'Sold, not updated'],
+  'unchanged':        ['t-warn',   'Unchanged'],
+  'updated':          ['t-ok',     'Updated']
+};
+
+function renderTable(rows) {
+  const tbody = document.getElementById('rt-body');
+  document.getElementById('row-count').textContent = `${rows.length.toLocaleString()} SKUs`;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-secondary);">No items in this category</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const [clsTotal, labelTotal] = STATUS_CFG[r.statusTotal] || ['t-info', r.statusTotal];
+    const [clsAvail, labelAvail] = STATUS_CFG[r.statusAvail] || ['t-info', r.statusAvail];
+    const tTotalDisplay = r.tTotal !== null ? r.tTotal : '—';
+    const tAvailDisplay = r.tAvail !== null ? r.tAvail : '—';
+    const sQtyDisplay   = r.sQty || '—';
+    const skuShort      = String(r.sku).replace(/\.0$/, '');
+    const safeName      = String(r.name || '—').replace(/"/g, '&quot;');
+    return `<tr>
+      <td><span class="store-chip">${r.store}</span></td>
+      <td style="font-family:var(--font-mono);font-size:11px;">${skuShort}</td>
+      <td class="name-cell" title="${safeName}">${r.name || '—'}</td>
+      <td style="color:var(--text-secondary);font-size:11px;">${r.cat || '—'}</td>
+      <td style="text-align:right;">${r.yTotal}</td>
+      <td style="text-align:right;">${tTotalDisplay}</td>
+      <td style="text-align:right;">${r.yAvail}</td>
+      <td style="text-align:right;">${tAvailDisplay}</td>
+      <td style="text-align:right;">${sQtyDisplay}</td>
+      <td><span class="tag ${clsTotal}">${labelTotal}</span></td>
+      <td><span class="tag ${clsAvail}">${labelAvail}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  applySearch();
+}
+
+function applySearch() {
+  const q = (document.getElementById('search-box')?.value || '').toLowerCase();
+  let rows = currentTab === 'all' ? allRows : allRows.filter(r => r.status === currentTab);
+  if (q) rows = rows.filter(r => String(r.sku).toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.store.toLowerCase().includes(q));
+  filteredRows = rows;
+  renderTable(rows);
+}
+
+function exportCSV() {
+  try {
+    if (!filteredRows || !filteredRows.length) {
+      alert('No rows to export in this tab.');
+      return;
+    }
+    const rows = [
+      ['Store','Product Code','Product Name','Category','Yesterday Total','Today Total','Yesterday Available','Today Available','Sales Qty','Total Status','Available Status'],
+      ...filteredRows.map(r => [
+        r.store, String(r.sku).replace(/\.0$/,''), r.name, r.cat,
+        r.yTotal, r.tTotal ?? '', r.yAvail, r.tAvail ?? '', r.sQty,
+        r.statusTotal, r.statusAvail
+      ])
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+
+    // Fallback for older/restrictive browsers (e.g. IE/Edge legacy)
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(blob, `stock_audit_${currentTab}.csv`);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stock_audit_${currentTab}.csv`;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    console.error('CSV export failed:', err);
+    alert('CSV export failed: ' + err.message + '\n\nTry opening this page on its hosted GitHub Pages URL instead of a local file.');
+  }
+}
+
+function resetAll() {
+  D = { y: null, t: null, s: null };
+  allRows = []; filteredRows = [];
+  document.getElementById('panel-upload').style.display  = 'block';
+  document.getElementById('panel-results').style.display = 'none';
+  ['z-y','z-t','z-s'].forEach(id => document.getElementById(id).classList.remove('done'));
+  document.getElementById('l-y').textContent = 'Store_product_Stock_Report…';
+  document.getElementById('l-t').textContent = 'Store_product_Stock_Report…';
+  document.getElementById('l-s').textContent = 'Store Transaction Sales…';
+  document.getElementById('run-btn').disabled = true;
+  ['i-y','i-t','i-s'].forEach(id => document.getElementById(id).value = '');
+}
+</script>
+</body>
+</html>
