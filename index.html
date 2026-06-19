@@ -533,6 +533,25 @@ wireZone('i-t','z-t','l-t','t');
 wireZone('i-s','z-s','l-s','s');
 
 // ── main analysis ────────────────────────────────────────────────────────────
+// ── Global helpers (used by runAnalysis AND exportCSV) ──────────────────────
+// Status logic:
+//  matched     : today == yesterday - sales  →  NO DIFF / Match
+//              : SKU not in today's file BUT expected remaining = 0 (sold out) → Match
+//  not-updated : today != yesterday - sales  →  Diff / not Updated
+//  missing     : SKU absent from today's file AND expected remaining stock > 0
+function statusFor(yQty, tQty, sQty) {
+  const expected = yQty - sQty;
+  if (tQty === undefined || tQty === null) {
+    return (expected <= 0) ? 'matched' : 'missing';
+  }
+  return (tQty === expected) ? 'matched' : 'not-updated';
+}
+function diffLabel(yQty, tQty, sQty) {
+  const expected = yQty - sQty;
+  if (tQty === null || tQty === undefined) return (expected <= 0) ? 'NO DIFF' : '—';
+  return (tQty === expected) ? 'NO DIFF' : 'Diff';
+}
+
 function runAnalysis() {
   const yF = D.y.fields;
 
@@ -595,27 +614,6 @@ function runAnalysis() {
   });
 
   // A SKU's status compares today's actual stock against the EXPECTED
-  // stock (yesterday's stock minus what was sold yesterday):
-  // Status logic:
-  //  matched     : today == yesterday - sales  →  NO DIFF / Match
-  //              : SKU not in today's file BUT expected remaining = 0 (sold out) → Match
-  //  not-updated : today != yesterday - sales  →  Diff / not Updated
-  //  missing     : SKU absent from today's file AND expected remaining stock > 0
-  function statusFor(yQty, tQty, sQty) {
-    const expected = yQty - sQty;
-    if (tQty === undefined || tQty === null) {
-      // Not in today's file — if sold out completely (expected <= 0), treat as Match
-      return (expected <= 0) ? 'matched' : 'missing';
-    }
-    return (tQty === expected) ? 'matched' : 'not-updated';
-  }
-  function diffLabel(yQty, tQty, sQty) {
-    const expected = yQty - sQty;
-    // Sold out and absent from today = NO DIFF
-    if (tQty === null || tQty === undefined) return (expected <= 0) ? 'NO DIFF' : '—';
-    return (tQty === expected) ? 'NO DIFF' : 'Diff';
-  }
-
   allRows = [];
   Object.entries(yMap).forEach(([k, d]) => {
     const t    = tMap[k];
