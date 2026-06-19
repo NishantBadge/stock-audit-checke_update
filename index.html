@@ -370,7 +370,7 @@
       <button class="tab-btn" onclick="switchTab('all',this)">All SKUs</button>
       <div class="right">
         <input id="search-box" type="text" placeholder="Search SKU / product…" style="width:180px;" oninput="applySearch()">
-        <button class="btn-outline" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+        <button class="btn-outline" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export Excel</button>
         <button class="btn-outline" onclick="resetAll()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
       </div>
     </div>
@@ -596,17 +596,24 @@ function runAnalysis() {
 
   // A SKU's status compares today's actual stock against the EXPECTED
   // stock (yesterday's stock minus what was sold yesterday):
-  // Status logic — exactly like the test file:
+  // Status logic:
   //  matched     : today == yesterday - sales  →  NO DIFF / Match
+  //              : SKU not in today's file BUT expected remaining = 0 (sold out) → Match
   //  not-updated : today != yesterday - sales  →  Diff / not Updated
-  //  missing     : SKU absent from today's file
+  //  missing     : SKU absent from today's file AND expected remaining stock > 0
   function statusFor(yQty, tQty, sQty) {
-    if (tQty === undefined || tQty === null) return 'missing';
-    return (tQty === yQty - sQty) ? 'matched' : 'not-updated';
+    const expected = yQty - sQty;
+    if (tQty === undefined || tQty === null) {
+      // Not in today's file — if sold out completely (expected <= 0), treat as Match
+      return (expected <= 0) ? 'matched' : 'missing';
+    }
+    return (tQty === expected) ? 'matched' : 'not-updated';
   }
   function diffLabel(yQty, tQty, sQty) {
-    if (tQty === null || tQty === undefined) return '—';
-    return (tQty === yQty - sQty) ? 'NO DIFF' : 'Diff';
+    const expected = yQty - sQty;
+    // Sold out and absent from today = NO DIFF
+    if (tQty === null || tQty === undefined) return (expected <= 0) ? 'NO DIFF' : '—';
+    return (tQty === expected) ? 'NO DIFF' : 'Diff';
   }
 
   allRows = [];
@@ -746,36 +753,109 @@ function exportCSV() {
       alert('No rows to export in this tab.');
       return;
     }
-    const rows = [
-      ['Store','Product Code','Product Name','Category','Yesterday Total','Today Total','Yesterday Available','Today Available','Sales Qty','Difference','Total Status','Available Status'],
-      ...filteredRows.map(r => [
-        r.store, String(r.sku).replace(/\.0$/,''), r.name, r.cat,
-        r.yTotal, r.tTotal ?? '', r.yAvail, r.tAvail ?? '', r.sQty,
-        r.statusTotal, r.statusAvail
-      ])
-    ];
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
 
-    // Fallback for older/restrictive browsers (e.g. IE/Edge legacy)
-    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-      window.navigator.msSaveOrOpenBlob(blob, `stock_audit_${currentTab}.csv`);
-      return;
+    const headers = [
+      'Store','Product Code','Product Name','Category',
+      'Yesterday Total','Today Total',
+      'Yesterday Available','Today Available',
+      'Sales Qty','Difference','Total Status','Available Status'
+    ];
+
+    // Build worksheet data array
+    const wsData = [headers];
+    filteredRows.forEach(r => {
+      const diff = diffLabel(r.yTotal, r.tTotal, r.sQty);
+      wsData.push([
+        r.store,
+        String(r.sku).replace(/\.0$/,''),
+        r.name, r.cat,
+        r.yTotal,
+        r.tTotal !== null ? r.tTotal : '',
+        r.yAvail,
+        r.tAvail !== null ? r.tAvail : '',
+        r.sQty,
+        diff,
+        STATUS_CFG[r.statusTotal] ? STATUS_CFG[r.statusTotal][1] : r.statusTotal,
+        STATUS_CFG[r.statusAvail] ? STATUS_CFG[r.statusAvail][1] : r.statusAvail
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Column widths
+    ws['!cols'] = [
+      {wch:8},{wch:18},{wch:40},{wch:18},
+      {wch:14},{wch:12},{wch:18},{wch:16},
+      {wch:10},{wch:12},{wch:16},{wch:16}
+    ];
+
+    // Style helpers
+    const headerFill = { patternType:'solid', fgColor:{rgb:'2D6A4F'} };
+    const headerFont = { bold:true, color:{rgb:'FFFFFF'}, sz:11 };
+    const redFill    = { patternType:'solid', fgColor:{rgb:'FFCCCC'} };
+    const redFont    = { bold:true, color:{rgb:'8B0000'} };
+    const greenFill  = { patternType:'solid', fgColor:{rgb:'D4EDDA'} };
+    const greenFont  = { color:{rgb:'155724'} };
+    const border     = {
+      top:{style:'thin',color:{rgb:'CCCCCC'}},
+      bottom:{style:'thin',color:{rgb:'CCCCCC'}},
+      left:{style:'thin',color:{rgb:'CCCCCC'}},
+      right:{style:'thin',color:{rgb:'CCCCCC'}}
+    };
+    const center = { horizontal:'center', vertical:'center' };
+
+    const numCols = headers.length;
+    const numRows = wsData.length;
+    const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+    // Apply header row styles
+    for (let c = 0; c < numCols; c++) {
+      const cellRef = colLetters[c] + '1';
+      if (!ws[cellRef]) continue;
+      ws[cellRef].s = {
+        fill: headerFill, font: headerFont,
+        alignment: center, border
+      };
     }
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    // Apply data row styles — red for not-updated, green for matched
+    for (let r = 1; r < numRows; r++) {
+      const row = filteredRows[r - 1];
+      const isNotUpdated = row.status === 'not-updated';
+      const isMissing    = row.status === 'missing';
+      const fill = isNotUpdated || isMissing ? redFill : greenFill;
+      const font = isNotUpdated || isMissing ? redFont  : greenFont;
+
+      for (let c = 0; c < numCols; c++) {
+        const cellRef = colLetters[c] + (r + 1);
+        if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' };
+        ws[cellRef].s = { fill, font, border, alignment: { vertical:'center' } };
+      }
+    }
+
+    // Freeze top header row
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Audit');
+
+    // Write and download
+    const wbout = XLSX.write(wb, { bookType:'xlsx', type:'array', cellStyles:true });
+    const blob = new Blob([wbout], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
     a.href = url;
-    a.download = `stock_audit_${currentTab}.csv`;
+    a.download = `stock_audit_${currentTab}.xlsx`;
     a.rel = 'noopener';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+
   } catch (err) {
-    console.error('CSV export failed:', err);
-    alert('CSV export failed: ' + err.message + '\n\nTry opening this page on its hosted GitHub Pages URL instead of a local file.');
+    console.error('Excel export failed:', err);
+    alert('Export failed: ' + err.message);
   }
 }
 
