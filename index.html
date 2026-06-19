@@ -128,6 +128,42 @@
   }
   .filter-row span { font-size: 12px; color: var(--text-secondary); }
 
+  details#mapping-section {
+    margin-bottom: 16px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card-bg);
+    padding: 0.75rem 1rem;
+  }
+  details#mapping-section summary {
+    cursor: pointer; font-size: 12px; color: var(--text-secondary); font-weight: 500;
+    list-style: none;
+  }
+  details#mapping-section summary::-webkit-details-marker { display: none; }
+  .mapping-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .map-title { font-size: 12px; font-weight: 500; color: var(--text-primary); margin: 0 0 8px; }
+  .map-group label {
+    display: flex; flex-direction: column; gap: 3px;
+    font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;
+  }
+  .map-group select { width: 100%; }
+  .map-warning {
+    font-size: 12px; color: var(--accent-danger-text); background: var(--accent-danger-bg);
+    border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: 12px; display: none;
+  }
+
+  .pager {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    margin-top: 8px; font-size: 11px; color: var(--text-secondary);
+  }
+  .pager button { padding: 4px 10px; }
+  .pager button:disabled { opacity: 0.35; cursor: default; }
+
   select, input[type="text"] {
     font-size: 12px;
     padding: 6px 10px;
@@ -251,7 +287,7 @@
 
   <header>
     <h1><i class="ti ti-clipboard-check" aria-hidden="true"></i> ASRL stock audit checker</h1>
-    <p>Compare yesterday's and today's stock reports against yesterday's sales to spot missing, unchanged, or wrongly-updated SKUs.</p>
+    <p>Upload yesterday's stock, today's stock, and yesterday's sales to check which SKUs are updated correctly.</p>
   </header>
 
   <!-- UPLOAD PANEL -->
@@ -279,6 +315,34 @@
       </div>
     </div>
 
+    <details id="mapping-section" style="display:none;">
+      <summary><i class="ti ti-adjustments" aria-hidden="true"></i> Column mapping (auto-detected — open to check or fix)</summary>
+      <div class="map-warning" id="map-warning"></div>
+      <div class="mapping-grid">
+        <div class="map-group">
+          <p class="map-title">Yesterday's stock</p>
+          <label>SKU column<select class="sm" id="sel-y-sku"></select></label>
+          <label>Store column<select class="sm" id="sel-y-store"></select></label>
+          <label>Total stock<select class="sm" id="sel-y-total"></select></label>
+          <label>Available stock<select class="sm" id="sel-y-avail"></select></label>
+          <label>Category<select class="sm" id="sel-y-cat"></select></label>
+        </div>
+        <div class="map-group">
+          <p class="map-title">Today's stock</p>
+          <label>SKU column<select class="sm" id="sel-t-sku"></select></label>
+          <label>Store column<select class="sm" id="sel-t-store"></select></label>
+          <label>Total stock<select class="sm" id="sel-t-total"></select></label>
+          <label>Available stock<select class="sm" id="sel-t-avail"></select></label>
+        </div>
+        <div class="map-group">
+          <p class="map-title">Yesterday's sales</p>
+          <label>Store column<select class="sm" id="sel-s-store"></select></label>
+          <label>SKU column<select class="sm" id="sel-s-sku"></select></label>
+          <label>Qty column<select class="sm" id="sel-s-qty"></select></label>
+        </div>
+      </div>
+    </details>
+
     <div class="filter-row">
       <span>Filter by store (optional):</span>
       <select id="store-sel"><option value="">All stores</option></select>
@@ -295,16 +359,14 @@
     <div class="mc-grid">
       <div class="mc"><p class="lbl">Yesterday SKUs</p><p class="val" id="m-y">—</p></div>
       <div class="mc"><p class="lbl">Today SKUs</p><p class="val" id="m-t">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-success-text);">✓ Match</p><p class="val" style="color:var(--accent-success-text);" id="m-ok">—</p></div>
+      <div class="mc"><p class="lbl" style="color:var(--accent-danger-text);">✗ Not updated</p><p class="val" style="color:var(--accent-danger-text);" id="m-snu">—</p></div>
       <div class="mc"><p class="lbl" style="color:var(--accent-danger-text);">Missing from today</p><p class="val" style="color:var(--accent-danger-text);" id="m-miss">—</p></div>
-      <div class="mc"><p class="lbl" style="color:var(--accent-warning-text);">Stock unchanged</p><p class="val" style="color:var(--accent-warning-text);" id="m-unch">—</p></div>
-      <div class="mc"><p class="lbl" style="color:var(--accent-danger-text);">Sold, not updated</p><p class="val" style="color:var(--accent-danger-text);" id="m-snu">—</p></div>
-      <div class="mc"><p class="lbl" style="color:var(--accent-success-text);">Updated correctly</p><p class="val" style="color:var(--accent-success-text);" id="m-ok">—</p></div>
     </div>
 
     <div class="tabs-row">
-      <button class="tab-btn active" onclick="switchTab('missing',this)"><i class="ti ti-alert-circle" aria-hidden="true"></i> Missing</button>
-      <button class="tab-btn" onclick="switchTab('sold-not-updated',this)"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Sold, not updated</button>
-      <button class="tab-btn" onclick="switchTab('unchanged',this)"><i class="ti ti-refresh-off" aria-hidden="true"></i> Unchanged</button>
+      <button class="tab-btn active" onclick="switchTab('not-updated',this)"><i class="ti ti-alert-circle" aria-hidden="true"></i> Not updated</button>
+      <button class="tab-btn" onclick="switchTab('missing',this)"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Missing from today</button>
       <button class="tab-btn" onclick="switchTab('all',this)">All SKUs</button>
       <div class="right">
         <input id="search-box" type="text" placeholder="Search SKU / product…" style="width:180px;" oninput="applySearch()">
@@ -326,6 +388,7 @@
             <th>Yest. available</th>
             <th>Today available</th>
             <th>Sales qty</th>
+            <th>Difference</th>
             <th>Total status</th>
             <th>Available status</th>
           </tr>
@@ -333,7 +396,12 @@
         <tbody id="rt-body"></tbody>
       </table>
     </div>
-    <p id="row-count"></p>
+    <div class="pager">
+      <span id="row-count"></span>
+      <button class="btn-outline" id="page-prev" onclick="changePage(-1)" aria-label="Previous page"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+      <span id="page-indicator"></span>
+      <button class="btn-outline" id="page-next" onclick="changePage(1)" aria-label="Next page"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+    </div>
   </div>
 
   <footer>
@@ -347,6 +415,15 @@ let D = { y: null, t: null, s: null };
 let allRows = [];
 let filteredRows = [];
 let currentTab = 'missing';
+let currentPage = 1;
+const PAGE_SIZE = 200;
+
+// Normalize SKU values so "2007171010101" and "2007171010101.0" (which can
+// happen when Excel stores the same code as text in one file and a number
+// in another) are treated as the same SKU.
+function normSku(v) {
+  return String(v).trim().replace(/\.0+$/, '');
+}
 
 // ── file reader ──────────────────────────────────────────────────────────────
 function readFile(file, cb) {
@@ -410,18 +487,44 @@ function wireZone(inputId, zoneId, lblId, key) {
   zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handle(e.dataTransfer.files[0]); });
 }
 
+function populateSelect(selId, fields, hints) {
+  const sel = document.getElementById(selId);
+  sel.innerHTML = '';
+  fields.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; sel.appendChild(o); });
+  sel.value = guess(fields, hints);
+}
+
 function afterUpload() {
   const ready = D.y && D.t && D.s;
   const btn = document.getElementById('run-btn');
   btn.disabled = !ready;
 
-  if (D.y || D.t) {
-    const src = D.y || D.t;
-    const storeCol = guess(src.fields, STORE_HINTS);
-    const stores = [...new Set(src.rows.map(r => String(r[storeCol]).trim()).filter(Boolean))].sort();
+  if (D.y) {
+    populateSelect('sel-y-sku', D.y.fields, SKU_HINTS);
+    populateSelect('sel-y-store', D.y.fields, STORE_HINTS);
+    populateSelect('sel-y-total', D.y.fields, TOTAL_HINTS);
+    populateSelect('sel-y-avail', D.y.fields, AVAIL_HINTS);
+    populateSelect('sel-y-cat', D.y.fields, CAT_HINTS);
+
+    const storeCol = guess(D.y.fields, STORE_HINTS);
+    const stores = [...new Set(D.y.rows.map(r => String(r[storeCol]).trim()).filter(Boolean))].sort();
     const sel = document.getElementById('store-sel');
     sel.innerHTML = '<option value="">All stores</option>';
     stores.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+  }
+  if (D.t) {
+    populateSelect('sel-t-sku', D.t.fields, SKU_HINTS);
+    populateSelect('sel-t-store', D.t.fields, STORE_HINTS);
+    populateSelect('sel-t-total', D.t.fields, TOTAL_HINTS);
+    populateSelect('sel-t-avail', D.t.fields, AVAIL_HINTS);
+  }
+  if (D.s) {
+    populateSelect('sel-s-store', D.s.fields, S_STORE_HINTS);
+    populateSelect('sel-s-sku', D.s.fields, S_SKU_HINTS);
+    populateSelect('sel-s-qty', D.s.fields, S_QTY_HINTS);
+  }
+  if (D.y || D.t || D.s) {
+    document.getElementById('mapping-section').style.display = 'block';
   }
 }
 
@@ -431,31 +534,31 @@ wireZone('i-s','z-s','l-s','s');
 
 // ── main analysis ────────────────────────────────────────────────────────────
 function runAnalysis() {
-  const yF = D.y.fields, tF = D.t.fields, sF = D.s.fields;
+  const yF = D.y.fields;
 
-  const skuColY    = guess(yF, SKU_HINTS);
-  const skuColT    = guess(tF, SKU_HINTS);
+  const skuColY    = document.getElementById('sel-y-sku').value;
+  const skuColT    = document.getElementById('sel-t-sku').value;
   const nameCol    = guess(yF, NAME_HINTS);
-  const totalColY  = guess(yF, TOTAL_HINTS);
-  const totalColT  = guess(tF, TOTAL_HINTS);
-  const availColY  = guess(yF, AVAIL_HINTS);
-  const availColT  = guess(tF, AVAIL_HINTS);
-  const storeColY  = guess(yF, STORE_HINTS);
-  const storeColT  = guess(tF, STORE_HINTS);
-  const catCol     = guess(yF, CAT_HINTS);
-  const sSkuCol    = guess(sF, S_SKU_HINTS);
-  const sQtyCol    = guess(sF, S_QTY_HINTS);
-  const sStoreCol  = guess(sF, S_STORE_HINTS);
+  const totalColY  = document.getElementById('sel-y-total').value;
+  const totalColT  = document.getElementById('sel-t-total').value;
+  const availColY  = document.getElementById('sel-y-avail').value;
+  const availColT  = document.getElementById('sel-t-avail').value;
+  const storeColY  = document.getElementById('sel-y-store').value;
+  const storeColT  = document.getElementById('sel-t-store').value;
+  const catCol     = document.getElementById('sel-y-cat').value;
+  const sSkuCol    = document.getElementById('sel-s-sku').value;
+  const sQtyCol    = document.getElementById('sel-s-qty').value;
+  const sStoreCol  = document.getElementById('sel-s-store').value;
 
   const filterStore = document.getElementById('store-sel').value;
   const toNum = v => { const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; };
-  const key = (store, sku) => `${store}||${sku}`;
+  const key = (store, sku) => `${store}||${normSku(sku)}`;
 
   // Build yesterday map: storeCode+SKU -> { qty, name, cat, store }
   const yMap = {};
   D.y.rows.forEach(r => {
     const store = String(r[storeColY]).trim();
-    const sku   = String(r[skuColY]).trim();
+    const sku   = normSku(r[skuColY]);
     if (!sku || sku === 'undefined' || sku === '') return;
     if (filterStore && store !== filterStore) return;
     yMap[key(store,sku)] = {
@@ -471,7 +574,7 @@ function runAnalysis() {
   const tMap = {};
   D.t.rows.forEach(r => {
     const store = String(r[storeColT]).trim();
-    const sku   = String(r[skuColT]).trim();
+    const sku   = normSku(r[skuColT]);
     if (!sku || sku === 'undefined' || sku === '') return;
     if (filterStore && store !== filterStore) return;
     tMap[key(store,sku)] = {
@@ -484,18 +587,26 @@ function runAnalysis() {
   const sMap = {};
   D.s.rows.forEach(r => {
     const store = String(r[sStoreCol]).trim();
-    const sku   = String(r[sSkuCol]).trim();
+    const sku   = normSku(r[sSkuCol]);
     if (!sku || sku === 'undefined') return;
     if (filterStore && store !== filterStore) return;
     const k = key(store, sku);
     sMap[k] = (sMap[k] || 0) + toNum(r[sQtyCol]);
   });
 
+  // A SKU's status compares today's actual stock against the EXPECTED
+  // stock (yesterday's stock minus what was sold yesterday):
+  // Status logic — exactly like the test file:
+  //  matched     : today == yesterday - sales  →  NO DIFF / Match
+  //  not-updated : today != yesterday - sales  →  Diff / not Updated
+  //  missing     : SKU absent from today's file
   function statusFor(yQty, tQty, sQty) {
-    if (tQty === undefined) return 'missing';
-    if (sQty > 0 && tQty === yQty) return 'sold-not-updated';
-    if (tQty === yQty) return 'unchanged';
-    return 'updated';
+    if (tQty === undefined || tQty === null) return 'missing';
+    return (tQty === yQty - sQty) ? 'matched' : 'not-updated';
+  }
+  function diffLabel(yQty, tQty, sQty) {
+    if (tQty === null || tQty === undefined) return '—';
+    return (tQty === yQty - sQty) ? 'NO DIFF' : 'Diff';
   }
 
   allRows = [];
@@ -512,8 +623,8 @@ function runAnalysis() {
     const statusTotal = statusFor(d.yTotal, tTotal, sQty);
     const statusAvail = statusFor(d.yAvail, tAvail, sQty);
 
-    // Combined status: worst of the two (missing > sold-not-updated > unchanged > updated)
-    const rank = { 'missing': 3, 'sold-not-updated': 2, 'unchanged': 1, 'updated': 0 };
+    // Combined status: worst of the two (missing > sold-not-updated > mismatch > matched)
+    const rank = { 'missing': 2, 'not-updated': 1, 'matched': 0 };
     const status = rank[statusTotal] >= rank[statusAvail] ? statusTotal : statusAvail;
 
     allRows.push({
@@ -527,37 +638,43 @@ function runAnalysis() {
     });
   });
 
-  const miss = allRows.filter(r => r.status === 'missing').length;
-  const unch = allRows.filter(r => r.status === 'unchanged').length;
-  const snu  = allRows.filter(r => r.status === 'sold-not-updated').length;
-  const ok   = allRows.filter(r => r.status === 'updated').length;
+  const miss  = allRows.filter(r => r.status === 'missing').length;
+  const snu   = allRows.filter(r => r.status === 'not-updated').length;
+  const ok    = allRows.filter(r => r.status === 'matched').length;
 
   document.getElementById('m-y').textContent    = Object.keys(yMap).length.toLocaleString();
   document.getElementById('m-t').textContent    = Object.keys(tMap).length.toLocaleString();
   document.getElementById('m-miss').textContent = miss.toLocaleString();
-  document.getElementById('m-unch').textContent = unch.toLocaleString();
   document.getElementById('m-snu').textContent  = snu.toLocaleString();
   document.getElementById('m-ok').textContent   = ok.toLocaleString();
+
+  const warn = document.getElementById('map-warning');
+  const matchRate = allRows.length ? (allRows.length - miss) / allRows.length : 1;
+  if (matchRate < 0.5) {
+    warn.style.display = 'block';
+    warn.textContent = `Only ${Math.round(matchRate*100)}% of yesterday's SKUs were found in today's file. This usually means the SKU or Store column was detected incorrectly for one of the files — open "Column mapping" above and check the selections, especially the SKU column for Today's stock.`;
+    document.getElementById('mapping-section').open = true;
+  } else {
+    warn.style.display = 'none';
+  }
 
   document.getElementById('panel-upload').style.display  = 'none';
   document.getElementById('panel-results').style.display = 'block';
 
-  switchTab('missing', document.querySelector('.tab-btn'));
+  switchTab('not-updated', document.querySelector('.tab-btn'));
 }
 
 // ── table rendering ──────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  'missing':          ['t-danger', 'Missing from today'],
-  'sold-not-updated': ['t-danger', 'Sold, not updated'],
-  'unchanged':        ['t-warn',   'Unchanged'],
-  'updated':          ['t-ok',     'Updated']
+  'missing':     ['t-danger', 'Missing'],
+  'not-updated': ['t-danger', 'not Updated'],
+  'matched':     ['t-ok',     'Match']
 };
 
 function renderTable(rows) {
   const tbody = document.getElementById('rt-body');
-  document.getElementById('row-count').textContent = `${rows.length.toLocaleString()} SKUs`;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-secondary);">No items in this category</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-secondary);">No items in this category</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => {
@@ -568,6 +685,8 @@ function renderTable(rows) {
     const sQtyDisplay   = r.sQty || '—';
     const skuShort      = String(r.sku).replace(/\.0$/, '');
     const safeName      = String(r.name || '—').replace(/"/g, '&quot;');
+    const diff = diffLabel(r.yTotal, r.tTotal, r.sQty);
+    const diffCls = diff === 'NO DIFF' ? 't-ok' : (diff === '—' ? '' : 't-danger');
     return `<tr>
       <td><span class="store-chip">${r.store}</span></td>
       <td style="font-family:var(--font-mono);font-size:11px;">${skuShort}</td>
@@ -578,10 +697,31 @@ function renderTable(rows) {
       <td style="text-align:right;">${r.yAvail}</td>
       <td style="text-align:right;">${tAvailDisplay}</td>
       <td style="text-align:right;">${sQtyDisplay}</td>
+      <td style="text-align:center;"><span class="tag ${diffCls}">${diff}</span></td>
       <td><span class="tag ${clsTotal}">${labelTotal}</span></td>
       <td><span class="tag ${clsAvail}">${labelAvail}</span></td>
     </tr>`;
   }).join('');
+}
+
+function renderPage() {
+  const total = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  renderTable(filteredRows.slice(start, start + PAGE_SIZE));
+
+  document.getElementById('row-count').textContent =
+    total ? `Showing ${start + 1}–${Math.min(start + PAGE_SIZE, total)} of ${total.toLocaleString()} SKUs` : '0 SKUs';
+  document.getElementById('page-indicator').textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('page-prev').disabled = currentPage <= 1;
+  document.getElementById('page-next').disabled = currentPage >= totalPages;
+}
+
+function changePage(delta) {
+  currentPage += delta;
+  renderPage();
 }
 
 function switchTab(tab, btn) {
@@ -596,7 +736,8 @@ function applySearch() {
   let rows = currentTab === 'all' ? allRows : allRows.filter(r => r.status === currentTab);
   if (q) rows = rows.filter(r => String(r.sku).toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.store.toLowerCase().includes(q));
   filteredRows = rows;
-  renderTable(rows);
+  currentPage = 1;
+  renderPage();
 }
 
 function exportCSV() {
@@ -606,7 +747,7 @@ function exportCSV() {
       return;
     }
     const rows = [
-      ['Store','Product Code','Product Name','Category','Yesterday Total','Today Total','Yesterday Available','Today Available','Sales Qty','Total Status','Available Status'],
+      ['Store','Product Code','Product Name','Category','Yesterday Total','Today Total','Yesterday Available','Today Available','Sales Qty','Difference','Total Status','Available Status'],
       ...filteredRows.map(r => [
         r.store, String(r.sku).replace(/\.0$/,''), r.name, r.cat,
         r.yTotal, r.tTotal ?? '', r.yAvail, r.tAvail ?? '', r.sQty,
@@ -640,14 +781,18 @@ function exportCSV() {
 
 function resetAll() {
   D = { y: null, t: null, s: null };
-  allRows = []; filteredRows = [];
+  allRows = []; filteredRows = []; currentPage = 1; currentTab = 'not-updated';
   document.getElementById('panel-upload').style.display  = 'block';
   document.getElementById('panel-results').style.display = 'none';
+  document.getElementById('mapping-section').style.display = 'none';
+  document.getElementById('mapping-section').open = false;
+  document.getElementById('map-warning').style.display = 'none';
   ['z-y','z-t','z-s'].forEach(id => document.getElementById(id).classList.remove('done'));
   document.getElementById('l-y').textContent = 'Store_product_Stock_Report…';
   document.getElementById('l-t').textContent = 'Store_product_Stock_Report…';
   document.getElementById('l-s').textContent = 'Store Transaction Sales…';
   document.getElementById('run-btn').disabled = true;
+  document.getElementById('search-box').value = '';
   ['i-y','i-t','i-s'].forEach(id => document.getElementById(id).value = '');
 }
 </script>
