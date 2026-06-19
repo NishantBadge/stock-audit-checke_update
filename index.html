@@ -414,7 +414,7 @@
 let D = { y: null, t: null, s: null };
 let allRows = [];
 let filteredRows = [];
-let currentTab = 'missing';
+let currentTab = 'not-updated';
 let currentPage = 1;
 const PAGE_SIZE = 200;
 
@@ -678,37 +678,53 @@ const STATUS_CFG = {
   'matched':     ['t-ok',     'Match']
 };
 
+function rowHTML(r) {
+  const [clsTotal, labelTotal] = STATUS_CFG[r.statusTotal] || ['t-info', r.statusTotal];
+  const [clsAvail, labelAvail] = STATUS_CFG[r.statusAvail] || ['t-info', r.statusAvail];
+  const tTotalDisplay = r.tTotal !== null ? r.tTotal : '—';
+  const tAvailDisplay = r.tAvail !== null ? r.tAvail : '—';
+  const sQtyDisplay   = r.sQty || '—';
+  const skuShort      = String(r.sku).replace(/\.0$/, '');
+  const safeName      = String(r.name || '—').replace(/"/g, '&quot;');
+  const diff          = diffLabel(r.yTotal, r.tTotal, r.sQty);
+  const diffCls       = diff === 'NO DIFF' ? 't-ok' : (diff === '—' ? '' : 't-danger');
+  return `<tr>
+    <td><span class="store-chip">${r.store}</span></td>
+    <td style="font-family:var(--font-mono);font-size:11px;">${skuShort}</td>
+    <td class="name-cell" title="${safeName}">${r.name || '—'}</td>
+    <td style="color:var(--text-secondary);font-size:11px;">${r.cat || '—'}</td>
+    <td style="text-align:right;">${r.yTotal}</td>
+    <td style="text-align:right;">${tTotalDisplay}</td>
+    <td style="text-align:right;">${r.yAvail}</td>
+    <td style="text-align:right;">${tAvailDisplay}</td>
+    <td style="text-align:right;">${sQtyDisplay}</td>
+    <td style="text-align:center;"><span class="tag ${diffCls}">${diff}</span></td>
+    <td><span class="tag ${clsTotal}">${labelTotal}</span></td>
+    <td><span class="tag ${clsAvail}">${labelAvail}</span></td>
+  </tr>`;
+}
+
 function renderTable(rows) {
   const tbody = document.getElementById('rt-body');
+  tbody.innerHTML = '';
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-secondary);">No items in this category</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(r => {
-    const [clsTotal, labelTotal] = STATUS_CFG[r.statusTotal] || ['t-info', r.statusTotal];
-    const [clsAvail, labelAvail] = STATUS_CFG[r.statusAvail] || ['t-info', r.statusAvail];
-    const tTotalDisplay = r.tTotal !== null ? r.tTotal : '—';
-    const tAvailDisplay = r.tAvail !== null ? r.tAvail : '—';
-    const sQtyDisplay   = r.sQty || '—';
-    const skuShort      = String(r.sku).replace(/\.0$/, '');
-    const safeName      = String(r.name || '—').replace(/"/g, '&quot;');
-    const diff = diffLabel(r.yTotal, r.tTotal, r.sQty);
-    const diffCls = diff === 'NO DIFF' ? 't-ok' : (diff === '—' ? '' : 't-danger');
-    return `<tr>
-      <td><span class="store-chip">${r.store}</span></td>
-      <td style="font-family:var(--font-mono);font-size:11px;">${skuShort}</td>
-      <td class="name-cell" title="${safeName}">${r.name || '—'}</td>
-      <td style="color:var(--text-secondary);font-size:11px;">${r.cat || '—'}</td>
-      <td style="text-align:right;">${r.yTotal}</td>
-      <td style="text-align:right;">${tTotalDisplay}</td>
-      <td style="text-align:right;">${r.yAvail}</td>
-      <td style="text-align:right;">${tAvailDisplay}</td>
-      <td style="text-align:right;">${sQtyDisplay}</td>
-      <td style="text-align:center;"><span class="tag ${diffCls}">${diff}</span></td>
-      <td><span class="tag ${clsTotal}">${labelTotal}</span></td>
-      <td><span class="tag ${clsAvail}">${labelAvail}</span></td>
-    </tr>`;
-  }).join('');
+  // Render in batches of 50 via setTimeout to keep UI responsive
+  const BATCH = 50;
+  let idx = 0;
+  function renderBatch() {
+    const fragment = document.createDocumentFragment();
+    const end = Math.min(idx + BATCH, rows.length);
+    const tmp = document.createElement('tbody');
+    tmp.innerHTML = rows.slice(idx, end).map(rowHTML).join('');
+    while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
+    tbody.appendChild(fragment);
+    idx = end;
+    if (idx < rows.length) setTimeout(renderBatch, 0);
+  }
+  setTimeout(renderBatch, 0);
 }
 
 function renderPage() {
@@ -819,19 +835,22 @@ function exportCSV() {
       };
     }
 
-    // Apply data row styles — red for not-updated, green for matched
+    // Apply data row styles — red for not-updated/missing, green for matched
+    // Only style status + difference columns on large files to avoid slowdown
+    const large = numRows > 5000;
     for (let r = 1; r < numRows; r++) {
       const row = filteredRows[r - 1];
-      const isNotUpdated = row.status === 'not-updated';
-      const isMissing    = row.status === 'missing';
-      const fill = isNotUpdated || isMissing ? redFill : greenFill;
-      const font = isNotUpdated || isMissing ? redFont  : greenFont;
-
-      for (let c = 0; c < numCols; c++) {
+      const isBad = row.status === 'not-updated' || row.status === 'missing';
+      const fill  = isBad ? redFill  : greenFill;
+      const font  = isBad ? redFont  : greenFont;
+      const colsToStyle = large
+        ? [9, 10, 11]   // only Difference, Total Status, Available Status cols
+        : Array.from({length: numCols}, (_, i) => i);
+      colsToStyle.forEach(c => {
         const cellRef = colLetters[c] + (r + 1);
         if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' };
         ws[cellRef].s = { fill, font, border, alignment: { vertical:'center' } };
-      }
+      });
     }
 
     // Freeze top header row
