@@ -416,7 +416,7 @@ let allRows = [];
 let filteredRows = [];
 let currentTab = 'not-updated';
 let currentPage = 1;
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 100;
 
 // Normalize SKU values so "2007171010101" and "2007171010101.0" (which can
 // happen when Excel stores the same code as text in one file and a number
@@ -666,7 +666,7 @@ function runAnalysis() {
   document.getElementById('panel-upload').style.display  = 'none';
   document.getElementById('panel-results').style.display = 'block';
 
-  switchTab('not-updated', document.querySelector('.tab-btn'));
+  switchTab('not-updated', null);
 }
 
 // ── table rendering ──────────────────────────────────────────────────────────
@@ -704,25 +704,14 @@ function rowHTML(r) {
 
 function renderTable(rows) {
   const tbody = document.getElementById('rt-body');
+  if (!tbody) return;
   tbody.innerHTML = '';
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-secondary);">No items in this category</td></tr>`;
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text-secondary);font-size:13px;">No items in this category</td></tr>';
     return;
   }
-  // Render in batches of 50 via setTimeout to keep UI responsive
-  const BATCH = 50;
-  let idx = 0;
-  function renderBatch() {
-    const fragment = document.createDocumentFragment();
-    const end = Math.min(idx + BATCH, rows.length);
-    const tmp = document.createElement('tbody');
-    tmp.innerHTML = rows.slice(idx, end).map(rowHTML).join('');
-    while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
-    tbody.appendChild(fragment);
-    idx = end;
-    if (idx < rows.length) setTimeout(renderBatch, 0);
-  }
-  setTimeout(renderBatch, 0);
+  // Build full HTML string and set once — fastest for up to 500 rows per page
+  tbody.innerHTML = rows.map(rowHTML).join('');
 }
 
 function renderPage() {
@@ -748,7 +737,17 @@ function changePage(delta) {
 function switchTab(tab, btn) {
   currentTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  // btn may be an event-passed element or a querySelector result
+  if (btn && btn.classList) {
+    btn.classList.add('active');
+  } else {
+    // find the tab button matching this tab and activate it
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + tab + "'")) {
+        b.classList.add('active');
+      }
+    });
+  }
   applySearch();
 }
 
