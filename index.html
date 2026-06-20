@@ -325,6 +325,7 @@
           <label>Store column<select class="sm" id="sel-y-store"></select></label>
           <label>Total stock<select class="sm" id="sel-y-total"></select></label>
           <label>Available stock<select class="sm" id="sel-y-avail"></select></label>
+          <label>Product name (English)<select class="sm" id="sel-y-name"></select></label>
           <label>Category<select class="sm" id="sel-y-cat"></select></label>
         </div>
         <div class="map-group">
@@ -458,11 +459,13 @@ function guess(fields, hints) {
 
 // Known column patterns for Miniso stock export
 const SKU_HINTS   = ['product code', '商品代码'];
-const NAME_HINTS  = ['product name商品名称.1', 'product name', '商品名称'];
+// English product name column is the duplicate-suffixed one, e.g. "Product Name商品名称.1"
+const NAME_HINTS  = ['product name商品名称.1', 'name.1', 'product name'];
 const TOTAL_HINTS = ['total stock', '总库存'];
 const AVAIL_HINTS = ['available stock', '可用库存'];
 const STORE_HINTS = ['store name门店代码', 'store code', '门店代码'];
-const CAT_HINTS   = ['category name大类名称.1', 'category name', '大类名称'];
+// English category column is similarly the .1 suffixed one
+const CAT_HINTS   = ['category name大类名称.1', 'category name.1', 'category name'];
 // Sales file patterns
 const S_SKU_HINTS   = ['product code', '商品代码'];
 const S_QTY_HINTS   = ['qty'];
@@ -504,6 +507,7 @@ function afterUpload() {
     populateSelect('sel-y-store', D.y.fields, STORE_HINTS);
     populateSelect('sel-y-total', D.y.fields, TOTAL_HINTS);
     populateSelect('sel-y-avail', D.y.fields, AVAIL_HINTS);
+    populateSelect('sel-y-name', D.y.fields, NAME_HINTS);
     populateSelect('sel-y-cat', D.y.fields, CAT_HINTS);
 
     const storeCol = guess(D.y.fields, STORE_HINTS);
@@ -557,7 +561,7 @@ function runAnalysis() {
 
   const skuColY    = document.getElementById('sel-y-sku').value;
   const skuColT    = document.getElementById('sel-t-sku').value;
-  const nameCol    = guess(yF, NAME_HINTS);
+  const nameCol    = document.getElementById('sel-y-name').value;
   const totalColY  = document.getElementById('sel-y-total').value;
   const totalColT  = document.getElementById('sel-t-total').value;
   const availColY  = document.getElementById('sel-y-avail').value;
@@ -795,6 +799,17 @@ function exportCSV() {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Force Product Code column (col B) to be stored as TEXT so Excel never
+    // auto-converts long numeric SKUs into scientific notation (e.g. 2.02E+12)
+    for (let r = 1; r < wsData.length; r++) {
+      const cellRef = 'B' + (r + 1);
+      if (ws[cellRef]) {
+        ws[cellRef].t = 's';                 // string type
+        ws[cellRef].z = '@';                 // text number format
+        ws[cellRef].v = String(ws[cellRef].v);
+      }
+    }
 
     // Column widths
     ws['!cols'] = [
